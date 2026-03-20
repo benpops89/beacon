@@ -1,0 +1,16 @@
+{
+  "name": "writer",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.2.27",
+    "zod": "^4.3.6"
+  }
+}

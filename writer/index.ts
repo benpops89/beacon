@@ -32,6 +32,7 @@ async function updateStatus(status: "running" | "input_required" | "finished", a
   const payload: Record<string, string> = {
     status,
     updated_at: new Date().toISOString(),
+    session_name: sessionName,
   };
 
   if (agent) {

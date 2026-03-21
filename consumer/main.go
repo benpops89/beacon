@@ -45,9 +45,10 @@ var color = Colors{
 }
 
 type State struct {
-	Status    string    `json:"status"`
-	Agent     string    `json:"agent"`
-	UpdatedAt time.Time `json:"updated_at"`
+	Status      string    `json:"status"`
+	Agent       string    `json:"agent"`
+	SessionName string    `json:"session_name"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type SessionStatus string
@@ -117,7 +118,10 @@ func loadSessions(dir string, now time.Time) []Session {
 			continue
 		}
 
-		sessionName := strings.TrimSuffix(filepath.Base(file), ".json")
+		sessionName := state.SessionName
+		if sessionName == "" {
+			sessionName = strings.TrimSuffix(filepath.Base(file), ".json")
+		}
 
 		status := SessionStatus(state.Status)
 

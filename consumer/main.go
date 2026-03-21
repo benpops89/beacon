@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -70,6 +71,7 @@ type Session struct {
 func main() {
 	barMode := flag.Bool("bar", false, "Output tmux status bar format")
 	listMode := flag.Bool("list", false, "List sessions for Television integration")
+	switchMode := flag.Bool("switch", false, "Switch to a session and mark it as idle")
 	flag.Parse()
 
 	home, err := os.UserHomeDir()
@@ -77,6 +79,16 @@ func main() {
 		return
 	}
 	dir := filepath.Join(home, beaconDir)
+
+	if *switchMode {
+		if len(flag.Args()) < 1 {
+			fmt.Fprintf(os.Stderr, "Usage: beacon --switch <session_name>\n")
+			return
+		}
+		targetSession := flag.Args()[0]
+		handleSwitch(dir, targetSession)
+		return
+	}
 
 	if *listMode {
 		listSessions(dir, time.Now())
@@ -250,4 +262,73 @@ func formatBar(dir string, now time.Time) string {
 	}
 
 	return strings.Join(parts, " ")
+}
+
+func handleSwitch(dir string, targetSession string) {
+	// Switch to target session
+	switchCmd := exec.Command("tmux", "switch-client", "-t", targetSession)
+	switchCmd.Stdout = os.Stdout
+	switchCmd.Stderr = os.Stderr
+	switchCmd.Run()
+
+	// Update target session status to idle (acknowledged)
+	updateSessionStatus(dir, targetSession, StatusIdle)
+}
+
+func updateSessionStatus(dir string, sessionName string, status SessionStatus) {
+	// Find the file for this session (check session_name field first, then filename)
+	files, err := filepath.Glob(filepath.Join(dir, "*.json"))
+	if err != nil {
+		return
+	}
+
+	var targetFile string
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			continue
+		}
+
+		var state State
+		if err := json.Unmarshal(data, &state); err != nil {
+			continue
+		}
+
+		// Check if session_name matches, or if filename matches (sanitized)
+		sessionFromFile := state.SessionName
+		if sessionFromFile == "" {
+			sessionFromFile = strings.TrimSuffix(filepath.Base(file), ".json")
+		}
+
+		if sessionFromFile == sessionName {
+			targetFile = file
+			break
+		}
+	}
+
+	if targetFile == "" {
+		return
+	}
+
+	// Read existing file
+	data, err := os.ReadFile(targetFile)
+	if err != nil {
+		return
+	}
+
+	var state State
+	if err := json.Unmarshal(data, &state); err != nil {
+		return
+	}
+
+	// Update status
+	state.Status = string(status)
+	state.UpdatedAt = time.Now()
+
+	// Write back
+	updatedData, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return
+	}
+	os.WriteFile(targetFile, updatedData, 0644)
 }

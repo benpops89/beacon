@@ -32,6 +32,7 @@ Beacon is a lightweight, inbox-style status tracker designed for developers who 
 - **Input alerts**: Get notified when a session requires your input
 - **4-hour stale protection**: Automatically ignores outdated status files
 - **Tmux integration**: Seamless status bar updates every 2 seconds
+- **Television integration**: Fuzzy-search session switching with `tv beacon`
 - **Minimal footprint**: Two simple components - a TypeScript plugin and a Go binary
 
 ## Status States
@@ -42,6 +43,8 @@ Beacon is a lightweight, inbox-style status tracker designed for developers who 
 | Build mode | 🔨 | Build agent is running |
 | Unknown | ⏳ | Agent running, mode unidentified |
 | Input required | 🔔 | Session is waiting for your input |
+| Finished | ✅ | Session marked as complete |
+| Idle | 💤 | Session stale (>4h without update) |
 
 ## Installation
 
@@ -78,7 +81,7 @@ set -g status-interval 2
 set -g status-right "#(beacon --bar) #[fg=white,nobold]#(gitmux -cfg $HOME/.config/tmux/gitmux.yml)"
 
 # Optional: Open beacon popup with M-b
-bind-key -n M-b display-popup -E -w 80% -h 70% "beacon"
+bind-key -n M-b display-popup -E -w 80% -h 70% "beacon --tui"
 ```
 
 Reload tmux configuration:
@@ -113,6 +116,57 @@ Example content:
 }
 ```
 
+### Command Line
+
+```bash
+beacon --bar      # Output tmux status bar format
+beacon --list     # List sessions for Television integration
+```
+
+## Interactive Session Switching (Television)
+
+Beacon integrates with [Television](https://github.com/alexpasmantier/television) for fuzzy-search session switching.
+
+### Installation
+
+```bash
+# Install Television
+curl -fsSL https://alexpasmantier.github.io/television/install.sh | bash
+```
+
+### Setup
+
+Create `~/.config/television/cable/beacon.toml`:
+
+```toml
+[metadata]
+name = "beacon"
+description = "Switch to opencode sessions"
+
+[source]
+command = "beacon --list"
+
+[actions.open]
+command = "tmux switch-client -t '{}'"
+mode = "execute"
+```
+
+### Usage
+
+```bash
+tv beacon
+```
+
+Or bind to a key in your shell for quick access:
+
+```bash
+# Zsh - add to ~/.zshrc
+echo 'eval "$(tv init zsh)"' >> ~/.zshrc
+bindkey -s '^b' 'tv beacon\n'
+```
+
+Now press `Ctrl+b` to fuzzy-search and switch sessions.
+
 ## Architecture
 
 ```
@@ -121,7 +175,7 @@ beacon/
 │   ├── index.ts        # Main plugin logic
 │   └── index.test.ts   # Unit tests
 └── consumer/           # Go CLI binary
-    ├── main.go         # Entry point and bar formatting
+    ├── main.go         # Entry point, bar formatting, list mode
     └── main_test.go    # Unit tests
 ```
 
@@ -136,10 +190,11 @@ The opencode plugin hooks into lifecycle events to track session state:
 
 ### Consumer (Go Binary)
 
-The Go binary scans status files and formats output for tmux:
+The Go binary scans status files and formats output:
 
-- **File scanning**: Reads all JSON files from `~/.local/share/beacon/`
-- **Stale filtering**: Ignores files older than 4 hours
+- **--bar mode**: Outputs icons for tmux status bar (ignores stale files)
+- **--list mode**: Lists all sessions for Television integration (includes stale)
+- **Stale filtering**: Ignores files older than 4 hours (bar mode only)
 - **Icon mapping**: Translates agent types to appropriate icons
 - **tmux formatting**: Outputs status-agnostic color codes
 

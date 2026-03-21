@@ -173,6 +173,8 @@ func (m model) View() string {
 
 	lines = append(lines, titleStyle.Render("Beacon Sessions"))
 	lines = append(lines, "")
+	lines = append(lines, dimStyle.Render("  SESSION          AGENT   STATUS  SINCE"))
+	lines = append(lines, "")
 
 	if len(m.sessions) == 0 {
 		lines = append(lines, dimStyle.Render("No active sessions"))

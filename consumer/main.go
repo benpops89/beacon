@@ -70,7 +70,8 @@ type Session struct {
 
 func main() {
 	barMode := flag.Bool("bar", false, "Output tmux status bar format")
-	listMode := flag.Bool("list", false, "List sessions for Television integration")
+	listMode := flag.Bool("list", false, "List sessions with icons")
+	listNamesMode := flag.Bool("list-names", false, "List session names for Television integration")
 	switchMode := flag.Bool("switch", false, "Switch to a session and mark it as idle")
 	flag.Parse()
 
@@ -79,6 +80,11 @@ func main() {
 		return
 	}
 	dir := filepath.Join(home, beaconDir)
+
+	if *listNamesMode {
+		listSessionNames(dir, time.Now())
+		return
+	}
 
 	if *switchMode {
 		if len(flag.Args()) < 1 {
@@ -108,6 +114,13 @@ func listSessions(dir string, now time.Time) {
 	for _, s := range sessions {
 		iconStr := getSessionIcon(s)
 		fmt.Println(iconStr + " " + s.Name)
+	}
+}
+
+func listSessionNames(dir string, now time.Time) {
+	sessions := loadSessions(dir, now)
+	for _, s := range sessions {
+		fmt.Println(s.Name)
 	}
 }
 
@@ -276,7 +289,6 @@ func handleSwitch(dir string, targetSession string) {
 }
 
 func updateSessionStatus(dir string, sessionName string, status SessionStatus) {
-	// Find the file for this session (check session_name field first, then filename)
 	files, err := filepath.Glob(filepath.Join(dir, "*.json"))
 	if err != nil {
 		return
@@ -294,7 +306,6 @@ func updateSessionStatus(dir string, sessionName string, status SessionStatus) {
 			continue
 		}
 
-		// Check if session_name matches, or if filename matches (sanitized)
 		sessionFromFile := state.SessionName
 		if sessionFromFile == "" {
 			sessionFromFile = strings.TrimSuffix(filepath.Base(file), ".json")
@@ -310,7 +321,6 @@ func updateSessionStatus(dir string, sessionName string, status SessionStatus) {
 		return
 	}
 
-	// Read existing file
 	data, err := os.ReadFile(targetFile)
 	if err != nil {
 		return
@@ -321,11 +331,9 @@ func updateSessionStatus(dir string, sessionName string, status SessionStatus) {
 		return
 	}
 
-	// Update status
 	state.Status = string(status)
 	state.UpdatedAt = time.Now()
 
-	// Write back
 	updatedData, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return

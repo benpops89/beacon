@@ -47,14 +47,23 @@ type State struct {
 
 func main() {
 	barMode := flag.Bool("bar", false, "Output tmux status bar format")
+	tuiMode := flag.Bool("tui", false, "Launch TUI mode")
 	flag.Parse()
 
-	if *barMode {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	dir := filepath.Join(home, beaconDir)
+
+	if *tuiMode {
+		if err := RunTUI(dir); err != nil {
+			fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)
 		}
-		dir := filepath.Join(home, beaconDir)
+		return
+	}
+
+	if *barMode {
 		output := formatBar(dir, time.Now())
 		if output != "" {
 			fmt.Print(output)

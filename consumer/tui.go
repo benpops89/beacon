@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-runewidth"
 )
 
 type SessionStatus string
@@ -31,11 +31,10 @@ type Session struct {
 }
 
 type model struct {
-	sessions    []Session
-	selectedIdx int
-	quitting    bool
-	width       int
-	height      int
+	table        table.Model
+	sessions     []Session
+	selectedName string
+	quitting     bool
 }
 
 var (
@@ -43,23 +42,9 @@ var (
 			Foreground(lipgloss.Color("white")).
 			Bold(true)
 
-	itemStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("white"))
-
-	selectedStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("cyan")).
-			Bold(true)
-
-	dimStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240"))
-
 	helpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240"))
 )
-
-func pad(s string, width int) string {
-	return s + strings.Repeat(" ", width-runewidth.StringWidth(s))
-}
 
 func getSessionIcon(session Session) string {
 	if session.Status == StatusRunning && time.Since(session.UpdatedAt) > staleDuration {
@@ -128,109 +113,58 @@ func formatRelativeTime(t time.Time) string {
 	return fmt.Sprintf("%dd ago", int(d.Hours())/24)
 }
 
+func buildTableRows(sessions []Session) []table.Row {
+	rows := make([]table.Row, len(sessions))
+	for i, s := range sessions {
+		rows[i] = table.Row{
+			getSessionIcon(s),
+			s.Name,
+			getAgentIcon(s.Agent),
+			getStatusAbbr(s.Status),
+			formatRelativeTime(s.UpdatedAt),
+		}
+	}
+	return rows
+}
+
 func (m model) Init() tea.Cmd {
 	return nil
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
 			m.quitting = true
 			return m, tea.Quit
 		case "enter", "o":
-			if len(m.sessions) > 0 && m.selectedIdx < len(m.sessions) {
-				selected := m.sessions[m.selectedIdx]
-				executeSwitch(selected.Name)
-				m.quitting = true
-				return m, tea.Quit
-			}
-		case "j", "down", "right":
-			if m.selectedIdx < len(m.sessions)-1 {
-				m.selectedIdx++
-			}
-		case "k", "up", "left":
-			if m.selectedIdx > 0 {
-				m.selectedIdx--
-			}
-		case "g", "home":
-			m.selectedIdx = 0
-		case "G", "end":
 			if len(m.sessions) > 0 {
-				m.selectedIdx = len(m.sessions) - 1
+				idx := m.table.Cursor()
+				if idx < len(m.sessions) {
+					m.selectedName = m.sessions[idx].Name
+					m.quitting = true
+					return m, tea.Quit
+				}
 			}
 		}
 	}
-	return m, nil
+
+	var cmd tea.Cmd
+	m.table, cmd = m.table.Update(msg)
+	return m, cmd
 }
 
 func (m model) View() string {
 	if m.quitting {
+		if m.selectedName != "" {
+			executeSwitch(m.selectedName)
+		}
 		return ""
 	}
 
-	var lines []string
-
-	lines = append(lines, titleStyle.Render("Beacon Sessions"))
-	lines = append(lines, "")
-	lines = append(lines, dimStyle.Render("  "+pad("SESSION", 20)+"AGENT   STATUS  SINCE"))
-	lines = append(lines, "")
-
-	if len(m.sessions) == 0 {
-		lines = append(lines, dimStyle.Render("No active sessions"))
-	} else {
-		maxItems := m.height - 5
-		if maxItems < 1 {
-			maxItems = len(m.sessions)
-		}
-
-		startIdx := 0
-		endIdx := len(m.sessions)
-		if len(m.sessions) > maxItems {
-			// Center selection in viewport
-			startIdx = m.selectedIdx - maxItems/2
-			endIdx = startIdx + maxItems
-			if startIdx < 0 {
-				startIdx = 0
-				endIdx = maxItems
-			}
-			if endIdx > len(m.sessions) {
-				endIdx = len(m.sessions)
-				startIdx = endIdx - maxItems
-			}
-		}
-
-		for i := startIdx; i < endIdx; i++ {
-			session := m.sessions[i]
-			icon := getSessionIcon(session)
-			agentIcon := getAgentIcon(session.Agent)
-			statusAbbr := getStatusAbbr(session.Status)
-			timeAgo := formatRelativeTime(session.UpdatedAt)
-
-			itemStr := fmt.Sprintf("%s  %s  %s  %s  %s",
-				pad(icon+" "+session.Name, 22),
-				agentIcon,
-				pad(statusAbbr, 6),
-				timeAgo,
-				"")
-
-			if i == m.selectedIdx {
-				lines = append(lines, selectedStyle.Render("▶ "+itemStr))
-			} else {
-				lines = append(lines, itemStyle.Render("  "+itemStr))
-			}
-		}
-	}
-
-	lines = append(lines, "")
-	lines = append(lines, helpStyle.Render("⏎ switch  ·  ↑↓ navigate  ·  q quit"))
-
-	return lipgloss.NewStyle().Width(m.width).Render(strings.Join(lines, "\n"))
+	header := titleStyle.Render("Beacon Sessions") + "\n\n"
+	return header + m.table.View() + "\n" + helpStyle.Render("⏎ switch  ·  ↑↓ navigate  ·  q quit")
 }
 
 func executeSwitch(sessionName string) {
@@ -324,22 +258,7 @@ func sortSessions(sessions []Session) []Session {
 
 		return sessions[i].UpdatedAt.After(sessions[j].UpdatedAt)
 	})
-
 	return sessions
-}
-
-func formatSessionItem(session Session) string {
-	icon := getSessionIcon(session)
-	agentIcon := getAgentIcon(session.Agent)
-	statusAbbr := getStatusAbbr(session.Status)
-	timeAgo := formatRelativeTime(session.UpdatedAt)
-
-	return fmt.Sprintf("%s  %-20s  %s  %-6s  %s",
-		icon,
-		session.Name,
-		agentIcon,
-		statusAbbr,
-		timeAgo)
 }
 
 func getSessionPriority(session Session) int {
@@ -357,14 +276,61 @@ func getSessionPriority(session Session) int {
 	}
 }
 
+func formatSessionItem(session Session) string {
+	icon := getSessionIcon(session)
+	agentIcon := getAgentIcon(session.Agent)
+	statusAbbr := getStatusAbbr(session.Status)
+	timeAgo := formatRelativeTime(session.UpdatedAt)
+
+	return fmt.Sprintf("%s  %s  %s  %s  %s",
+		icon,
+		session.Name,
+		agentIcon,
+		statusAbbr,
+		timeAgo)
+}
+
 func RunTUI(dir string) error {
 	now := time.Now()
 	sessions := loadSessions(dir, now)
 	sessions = sortSessions(sessions)
 
+	columns := []table.Column{
+		{Title: "", Width: 2},
+		{Title: "SESSION", Width: 20},
+		{Title: "AGENT", Width: 5},
+		{Title: "STATUS", Width: 6},
+		{Title: "SINCE", Width: 10},
+	}
+
+	rows := buildTableRows(sessions)
+
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(true),
+	)
+
+	s := table.DefaultStyles()
+	s.Header = s.Header.
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		BorderTop(false).
+		BorderBottom(false).
+		BorderLeft(false).
+		BorderRight(false).
+		Foreground(lipgloss.Color("240"))
+	s.Selected = s.Selected.
+		BorderTop(false).
+		BorderBottom(false).
+		BorderLeft(false).
+		BorderRight(false)
+	t.SetStyles(s)
+
 	m := model{
-		sessions:    sessions,
-		selectedIdx: 0,
+		table:        t,
+		sessions:     sessions,
+		selectedName: "",
 	}
 
 	_, err := tea.NewProgram(m, tea.WithAltScreen()).Run()

@@ -24,8 +24,9 @@ export async function getTmuxSession(): Promise<string> {
  * Writes the session status to ~/.local/share/beacon/[session].json.
  */
 async function updateStatus(status: "running" | "input_required" | "finished", agent?: string) {
-  const sessionName = (await getTmuxSession().catch(() => "unknown")).replace(/\//g, "_");
-  const filePath = join(BEACON_DIR, `${sessionName}.json`);
+  const sessionName = await getTmuxSession().catch(() => "unknown");
+  const fileName = sessionName.replace(/\//g, "_");
+  const filePath = join(BEACON_DIR, `${fileName}.json`);
 
   mkdirSync(BEACON_DIR, { recursive: true });
 

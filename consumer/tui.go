@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 )
 
 type SessionStatus string
@@ -55,6 +56,10 @@ var (
 	helpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240"))
 )
+
+func pad(s string, width int) string {
+	return s + strings.Repeat(" ", width-runewidth.StringWidth(s))
+}
 
 func getSessionIcon(session Session) string {
 	if session.Status == StatusRunning && time.Since(session.UpdatedAt) > staleDuration {
@@ -173,7 +178,7 @@ func (m model) View() string {
 
 	lines = append(lines, titleStyle.Render("Beacon Sessions"))
 	lines = append(lines, "")
-	lines = append(lines, dimStyle.Render("  SESSION          AGENT   STATUS  SINCE"))
+	lines = append(lines, dimStyle.Render("  "+pad("SESSION", 20)+"AGENT   STATUS  SINCE"))
 	lines = append(lines, "")
 
 	if len(m.sessions) == 0 {
@@ -207,12 +212,12 @@ func (m model) View() string {
 			statusAbbr := getStatusAbbr(session.Status)
 			timeAgo := formatRelativeTime(session.UpdatedAt)
 
-			itemStr := fmt.Sprintf("%s  %-20s  %s  %-6s  %s",
-				icon,
-				session.Name,
+			itemStr := fmt.Sprintf("%s  %s  %s  %s  %s",
+				pad(icon+" "+session.Name, 22),
 				agentIcon,
-				statusAbbr,
-				timeAgo)
+				pad(statusAbbr, 6),
+				timeAgo,
+				"")
 
 			if i == m.selectedIdx {
 				lines = append(lines, selectedStyle.Render("▶ "+itemStr))

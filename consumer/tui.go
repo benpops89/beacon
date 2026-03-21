@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -31,10 +30,11 @@ type Session struct {
 }
 
 type model struct {
-	list         list.Model
-	sessions     []Session
-	selectedName string
-	quitting     bool
+	sessions    []Session
+	selectedIdx int
+	quitting    bool
+	width       int
+	height      int
 }
 
 var (
@@ -45,18 +45,15 @@ var (
 	itemStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("white"))
 
-	statusRunningStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("cyan"))
+	selectedStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("cyan")).
+			Bold(true)
 
-	statusAlertStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("red")).
-				Bold(true)
+	dimStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240"))
 
-	statusFinishedStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("green"))
-
-	statusIdleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("gray"))
+	helpStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240"))
 )
 
 func getSessionIcon(session Session) string {
@@ -132,42 +129,101 @@ func (m model) Init() tea.Cmd {
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
 			m.quitting = true
 			return m, tea.Quit
 		case "enter", "o":
-			if len(m.sessions) > 0 && m.list.Index() < len(m.sessions) {
-				m.selectedName = m.sessions[m.list.Index()].Name
+			if len(m.sessions) > 0 && m.selectedIdx < len(m.sessions) {
+				selected := m.sessions[m.selectedIdx]
+				executeSwitch(selected.Name)
+				m.quitting = true
 				return m, tea.Quit
 			}
-		case "j", "down":
-			m.list.CursorDown()
-		case "k", "up":
-			m.list.CursorUp()
+		case "j", "down", "right":
+			if m.selectedIdx < len(m.sessions)-1 {
+				m.selectedIdx++
+			}
+		case "k", "up", "left":
+			if m.selectedIdx > 0 {
+				m.selectedIdx--
+			}
+		case "g", "home":
+			m.selectedIdx = 0
+		case "G", "end":
+			if len(m.sessions) > 0 {
+				m.selectedIdx = len(m.sessions) - 1
+			}
 		}
 	}
-	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
-	return m, cmd
+	return m, nil
 }
 
 func (m model) View() string {
 	if m.quitting {
-		if m.selectedName != "" {
-			executeSwitch(m.selectedName)
-		}
 		return ""
 	}
 
-	header := titleStyle.Render("Beacon Sessions") + "\n\n"
+	var lines []string
+
+	lines = append(lines, titleStyle.Render("Beacon Sessions"))
+	lines = append(lines, "")
 
 	if len(m.sessions) == 0 {
-		return header + itemStyle.Render("No active sessions\n")
+		lines = append(lines, dimStyle.Render("No active sessions"))
+	} else {
+		maxItems := m.height - 5
+		if maxItems < 1 {
+			maxItems = len(m.sessions)
+		}
+
+		startIdx := 0
+		endIdx := len(m.sessions)
+		if len(m.sessions) > maxItems {
+			// Center selection in viewport
+			startIdx = m.selectedIdx - maxItems/2
+			endIdx = startIdx + maxItems
+			if startIdx < 0 {
+				startIdx = 0
+				endIdx = maxItems
+			}
+			if endIdx > len(m.sessions) {
+				endIdx = len(m.sessions)
+				startIdx = endIdx - maxItems
+			}
+		}
+
+		for i := startIdx; i < endIdx; i++ {
+			session := m.sessions[i]
+			icon := getSessionIcon(session)
+			agentIcon := getAgentIcon(session.Agent)
+			statusAbbr := getStatusAbbr(session.Status)
+			timeAgo := formatRelativeTime(session.UpdatedAt)
+
+			itemStr := fmt.Sprintf("%s  %-20s  %s  %-6s  %s",
+				icon,
+				session.Name,
+				agentIcon,
+				statusAbbr,
+				timeAgo)
+
+			if i == m.selectedIdx {
+				lines = append(lines, selectedStyle.Render("▶ "+itemStr))
+			} else {
+				lines = append(lines, itemStyle.Render("  "+itemStr))
+			}
+		}
 	}
 
-	return header + m.list.View() + "\n\n" + itemStyle.Render("⏎ switch  ·  ↑↓ navigate  ·  q quit")
+	lines = append(lines, "")
+	lines = append(lines, helpStyle.Render("⏎ switch  ·  ↑↓ navigate  ·  q quit"))
+
+	return lipgloss.NewStyle().Width(m.width).Render(strings.Join(lines, "\n"))
 }
 
 func executeSwitch(sessionName string) {
@@ -265,6 +321,20 @@ func sortSessions(sessions []Session) []Session {
 	return sessions
 }
 
+func formatSessionItem(session Session) string {
+	icon := getSessionIcon(session)
+	agentIcon := getAgentIcon(session.Agent)
+	statusAbbr := getStatusAbbr(session.Status)
+	timeAgo := formatRelativeTime(session.UpdatedAt)
+
+	return fmt.Sprintf("%s  %-20s  %s  %-6s  %s",
+		icon,
+		session.Name,
+		agentIcon,
+		statusAbbr,
+		timeAgo)
+}
+
 func getSessionPriority(session Session) int {
 	switch session.Status {
 	case StatusInputRequired:
@@ -280,70 +350,16 @@ func getSessionPriority(session Session) int {
 	}
 }
 
-func formatSessionItem(session Session) string {
-	icon := getSessionIcon(session)
-	agentIcon := getAgentIcon(session.Agent)
-	statusAbbr := getStatusAbbr(session.Status)
-	timeAgo := formatRelativeTime(session.UpdatedAt)
-
-	return fmt.Sprintf("%s  %s      %s      %s    %s",
-		icon,
-		session.Name,
-		agentIcon,
-		statusAbbr,
-		timeAgo)
-}
-
 func RunTUI(dir string) error {
 	now := time.Now()
 	sessions := loadSessions(dir, now)
 	sessions = sortSessions(sessions)
 
-	var items []list.Item
-	for _, session := range sessions {
-		items = append(items, sessionItem{
-			session: session,
-			display: formatSessionItem(session),
-		})
-	}
-
-	if len(items) == 0 {
-		items = append(items, sessionItem{
-			display: "No active sessions",
-		})
-	}
-
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
-	l.SetShowTitle(false)
-	l.SetShowPagination(false)
-	l.SetShowHelp(false)
-	l.DisableQuitKeybindings()
-
 	m := model{
-		list:     l,
-		sessions: sessions,
+		sessions:    sessions,
+		selectedIdx: 0,
 	}
 
 	_, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
 	return err
-}
-
-type sessionItem struct {
-	session Session
-	display string
-}
-
-func (i sessionItem) Title() string {
-	return i.display
-}
-
-func (i sessionItem) Description() string {
-	return ""
-}
-
-func (i sessionItem) FilterValue() string {
-	if i.session.Name == "" {
-		return ""
-	}
-	return i.session.Name
 }

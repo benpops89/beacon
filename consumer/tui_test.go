@@ -231,7 +231,7 @@ func TestFormatSessionItem(t *testing.T) {
 	}
 
 	item := formatSessionItem(session)
-	expected := "🧠  github_test      🧠      run    5m ago"
+	expected := "🧠  github_test           🧠  run     5m ago"
 
 	if item != expected {
 		t.Errorf("formatSessionItem() = %s, want %s", item, expected)

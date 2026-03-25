@@ -1,0 +1,24 @@
+# Binaries
+/dist/
+/consumer/beacon
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/vendor/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local

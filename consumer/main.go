@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -69,58 +68,95 @@ type Session struct {
 }
 
 func main() {
-	barMode := flag.Bool("bar", false, "Output tmux status bar format")
-	listMode := flag.Bool("list", false, "List sessions with icons")
-	listNamesMode := flag.Bool("list-names", false, "List session names for Television integration")
-	switchMode := flag.Bool("switch", false, "Switch to a session and mark it as idle")
-	flag.Parse()
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
-	dir := filepath.Join(home, beaconDir)
-
-	if *listNamesMode {
-		listSessionNames(dir, time.Now())
+	if len(os.Args) < 2 {
+		printHelp()
 		return
 	}
 
-	if *switchMode {
-		if len(flag.Args()) < 1 {
-			fmt.Fprintf(os.Stderr, "Usage: beacon --switch <session_name>\n")
+	dir := getDir()
+	if dir == "" {
+		return
+	}
+
+	switch os.Args[1] {
+	case "status":
+		runStatus(dir)
+	case "switch":
+		if len(os.Args) < 3 {
+			fmt.Fprintln(os.Stderr, "Usage: beacon switch <session_name>")
 			return
 		}
-		targetSession := flag.Args()[0]
-		handleSwitch(dir, targetSession)
+		runSwitch(dir, os.Args[2])
+	case "list":
+		runList(dir, os.Args[2:])
+	default:
+		printHelp()
+	}
+}
+
+func printHelp() {
+	fmt.Println("Beacon - opencode session tracker")
+	fmt.Println("")
+	fmt.Println("Usage:")
+	fmt.Println("  beacon status              Output tmux status bar format")
+	fmt.Println("  beacon switch <session>   Switch to session and mark as idle")
+	fmt.Println("  beacon list               List sessions (plain names)")
+	fmt.Println("  beacon list --icons       List sessions with icons")
+	fmt.Println("")
+	fmt.Println("Examples:")
+	fmt.Println("  beacon status")
+	fmt.Println("  beacon switch github/beacon")
+	fmt.Println("  beacon list --icons")
+}
+
+func getDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, beaconDir)
+}
+
+func runStatus(dir string) {
+	output := formatBar(dir, time.Now())
+	if output != "" {
+		fmt.Print(output)
+	}
+}
+
+func runSwitch(dir string, targetSession string) {
+	if os.Getenv("TMUX") == "" {
 		return
 	}
 
-	if *listMode {
-		listSessions(dir, time.Now())
+	cmd := exec.Command("tmux", "switch-client", "-t", targetSession)
+	if err := cmd.Run(); err != nil {
 		return
 	}
 
-	if *barMode {
-		output := formatBar(dir, time.Now())
-		if output != "" {
-			fmt.Print(output)
+	updateSessionStatus(dir, targetSession, StatusIdle)
+}
+
+func runList(dir string, args []string) {
+	showIcons := false
+	for _, arg := range args {
+		if arg == "--icons" {
+			showIcons = true
 		}
 	}
-}
 
-func listSessions(dir string, now time.Time) {
+	now := time.Now()
 	sessions := loadSessions(dir, now)
-	for _, s := range sessions {
-		iconStr := getSessionIcon(s)
-		fmt.Println(iconStr + " " + s.Name)
-	}
-}
 
-func listSessionNames(dir string, now time.Time) {
-	sessions := loadSessions(dir, now)
-	for _, s := range sessions {
-		fmt.Println(s.Name)
+	if showIcons {
+		for _, s := range sessions {
+			iconStr := getSessionIcon(s)
+			fmt.Println(iconStr + " " + s.Name)
+		}
+	} else {
+		for _, s := range sessions {
+			fmt.Println(s.Name)
+		}
 	}
 }
 
@@ -275,22 +311,6 @@ func formatBar(dir string, now time.Time) string {
 	}
 
 	return strings.Join(parts, " ")
-}
-
-func handleSwitch(dir string, targetSession string) {
-	// Not in tmux? Silent fail
-	if os.Getenv("TMUX") == "" {
-		return
-	}
-
-	// Try to switch
-	cmd := exec.Command("tmux", "switch-client", "-t", targetSession)
-	if err := cmd.Run(); err != nil {
-		return // Silent fail
-	}
-
-	// Success - update status to idle
-	updateSessionStatus(dir, targetSession, StatusIdle)
 }
 
 func updateSessionStatus(dir string, sessionName string, status SessionStatus) {

@@ -278,13 +278,18 @@ func formatBar(dir string, now time.Time) string {
 }
 
 func handleSwitch(dir string, targetSession string) {
-	// Switch to target session
-	switchCmd := exec.Command("tmux", "switch-client", "-t", targetSession)
-	switchCmd.Stdout = os.Stdout
-	switchCmd.Stderr = os.Stderr
-	switchCmd.Run()
+	// Not in tmux? Silent fail
+	if os.Getenv("TMUX") == "" {
+		return
+	}
 
-	// Update target session status to idle (acknowledged)
+	// Try to switch
+	cmd := exec.Command("tmux", "switch-client", "-t", targetSession)
+	if err := cmd.Run(); err != nil {
+		return // Silent fail
+	}
+
+	// Success - update status to idle
 	updateSessionStatus(dir, targetSession, StatusIdle)
 }
 

@@ -78,10 +78,7 @@ Add the following to your `~/.tmux.conf`:
 set -g status-interval 2
 
 # Display beacon status alongside gitmux
-set -g status-right "#(beacon --bar) #[fg=white,nobold]#(gitmux -cfg $HOME/.config/tmux/gitmux.yml)"
-
-# Optional: Open beacon popup with M-b
-bind-key -n M-b display-popup -E -w 80% -h 70% "beacon --tui"
+set -g status-right "#(beacon status) #[fg=white,nobold]#(gitmux -cfg $HOME/.config/tmux/gitmux.yml)"
 ```
 
 Reload tmux configuration:
@@ -112,6 +109,7 @@ Example content:
 {
   "status": "running",
   "agent": "plan",
+  "session_name": "github/beacon",
   "updated_at": "2026-03-20T12:00:00Z"
 }
 ```
@@ -119,8 +117,10 @@ Example content:
 ### Command Line
 
 ```bash
-beacon --bar      # Output tmux status bar format
-beacon --list     # List sessions for Television integration
+beacon status              # Output tmux status bar format
+beacon list               # List sessions (plain names)
+beacon list --icons       # List sessions with icons
+beacon switch <session>   # Switch to session and mark as idle
 ```
 
 ## Interactive Session Switching (Television)
@@ -144,10 +144,13 @@ name = "beacon"
 description = "Switch to opencode sessions"
 
 [source]
-command = "beacon --list"
+command = "beacon list --icons"
+
+[keybindings]
+enter = "actions:open"
 
 [actions.open]
-command = "tmux switch-client -t '{}'"
+command = "beacon switch '{strip_ansi|split: :1..|join: }'"
 mode = "execute"
 ```
 
@@ -166,6 +169,10 @@ bindkey -s '^b' 'tv beacon\n'
 ```
 
 Now press `Ctrl+b` to fuzzy-search and switch sessions.
+
+When you select a session, beacon will:
+1. Switch to that tmux session
+2. Mark the session as "idle" (removing the alert 🔔 from the status bar)
 
 ## Architecture
 
@@ -192,9 +199,11 @@ The opencode plugin hooks into lifecycle events to track session state:
 
 The Go binary scans status files and formats output:
 
-- **--bar mode**: Outputs icons for tmux status bar (ignores stale files)
-- **--list mode**: Lists all sessions for Television integration (includes stale)
-- **Stale filtering**: Ignores files older than 4 hours (bar mode only)
+- **status**: Outputs icons for tmux status bar (ignores stale files)
+- **list**: Lists all sessions for Television integration (includes stale)
+- **list --icons**: Lists sessions with status icons
+- **switch <session>**: Switches to a session and marks it as idle
+- **Stale filtering**: Ignores files older than 4 hours (status mode only)
 - **Icon mapping**: Translates agent types to appropriate icons
 - **tmux formatting**: Outputs status-agnostic color codes
 

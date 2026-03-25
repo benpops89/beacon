@@ -1,0 +1,25 @@
+version: 2
+
+project_name: beacon
+
+builds:
+  - id: beacon
+    dir: ./consumer
+    binary: beacon
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: beacon
+    files:
+      - README.md
+
+release:
+  github:
+    owner: benpops89
+    name: beacon
+  draft: true

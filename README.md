@@ -1,9 +1,3 @@
-# Beacon
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Beacon-Inbox%20Style%20Tracker-FF6B6B?style=for-the-badge&logoColor=white" alt="Beacon">
-</p>
-
 <h1 align="center">Beacon</h1>
 
 <p align="center">

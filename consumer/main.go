@@ -125,13 +125,7 @@ func runStatus(dir string) {
 }
 
 func runSwitch(dir string, input string) {
-	// Television might pass "🧠 github/beacon" if configured to use icons.
-	// We extract only the session name.
 	targetSession := input
-	parts := strings.Split(input, " ")
-	if len(parts) > 1 {
-		targetSession = strings.Join(parts[1:], " ")
-	}
 
 	// Dual strategy: switch-client if in tmux, attach-session otherwise.
 	var cmd *exec.Cmd

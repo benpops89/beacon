@@ -243,7 +243,14 @@ bun test
 ```bash
 cd consumer
 go test -v
-```
+## Acknowledgments
+
+Beacon is heavily inspired by [sesh](https://github.com/joshmedeski/sesh) - a Go-based tmux session manager. Key concepts adapted:
+
+- Using a Go binary to interact with tmux
+- Session switching logic (`switch-client` / `attach-session`)
+- Listing sessions from the filesystem
+- Television integration with template syntax
 
 ## License
 
